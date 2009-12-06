@@ -1,0 +1,78 @@
+#!/bin/bash
+
+#====================================================================
+# Politec Global IT Services S/A
+# fone@RNP - Agente - v1.0
+# autor: Daniel Silva Braz
+#	     daniel.braz@politec.com.br
+# Script de instalacao do modulo cliente do sistema fone@RNP
+#====================================================================
+
+clear
+
+echo "#==================================="
+echo "# fone@RNP - Agente - v1.0"
+echo "#==================================="
+
+echo "Iniciando a instalacao do sistema..."
+
+INSTALL_DIR=/opt/fonernp-agente
+JAR_UNZIPPED_DIR=/tmp/fonernp-agente-jar-unzipped
+SQL_DIR=/root
+
+if [ ! -e $SQL_DIR/fonernp-agente.sql ] ;
+then
+	echo ">> Nao foi possivel encontrar o arquivo [$SQL_DIR/fonernp-agente.sql] para a criacao das tabelas"
+	exit
+fi
+
+if [ ! -e $INSTALL_DIR/fonernp-agente.jar ] ;
+then
+	echo ">> Nao foi possivel encontrar o arquivo [$INSTALL_DIR/fonernp-agente.jar] para a instalacao da aplicacao"
+	exit
+fi
+
+if [ -e $JAR_UNZIPPED_DIR ]
+then
+	rm -Rd $JAR_UNZIPPED_DIR
+fi
+
+echo ">> Executando os scripts de criacao dos objetos no PostgreSQL. A senha do usuario postgres podera ser solicitada durante o processo."
+echo -n "Por favor, informe o nome da base de dados: "
+read DATABASE_NAME
+su postgres -c "psql -f $SQL_DIR/fonernp-agente.sql $DATABASE_NAME"
+rm $SQL_DIR/fonernp-agente.sql
+
+echo ">> Descompactando o jar da aplicacao"
+
+mkdir $JAR_UNZIPPED_DIR
+cp $INSTALL_DIR/fonernp-agente.jar $JAR_UNZIPPED_DIR
+cd $JAR_UNZIPPED_DIR
+unzip -q fonernp-agente.jar
+rm fonernp-agente.jar
+
+echo ">> Configurando a conexao da aplicacao com o PostgreSQL"
+echo -n "Por favor, informe o nome do usuario para a conexao: "
+read DATABASE_USER
+echo -n "Por favor, informe a senha do usuario para conexao: "
+read DATABASE_USER_PASSWORD
+
+echo ">> Gerando o arquivo persistence.xml"
+echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?> <persistence version=\"1.0\" xmlns=\"http://java.sun.com/xml/ns/persistence\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://java.sun.com/xml/ns/persistence http://java.sun.com/xml/ns/persistence/persistence_1_0.xsd\"> <persistence-unit name=\"AgentePU\" transaction-type=\"RESOURCE_LOCAL\"> <provider>org.hibernate.ejb.HibernatePersistence</provider> <properties> <property name=\"hibernate.dialect\" value=\"org.hibernate.dialect.PostgreSQLDialect\" /> <property name=\"hibernate.connection.driver_class\" value=\"org.postgresql.Driver\" /> <property name=\"hibernate.hbm2ddl.auto\" value=\"none\" /> <property name=\"hibernate.show_sql\" value=\"true\" /> <property name=\"hibernate.connection.url\" value=\"jdbc:postgresql://localhost:5432/$DATABASE_NAME\" /> <property name=\"hibernate.connection.username\" value=\"$DATABASE_USER\" /> <property name=\"hibernate.connection.password\" value=\"$DATABASE_USER_PASSWORD\" /> </properties> </persistence-unit> </persistence>" > $JAR_UNZIPPED_DIR/META-INF/persistence.xml
+
+echo ">> Gerando o JAR"
+cd $JAR_UNZIPPED_DIR
+zip -rq fonernp-agente.jar *
+mv fonernp-agente.jar $INSTALL_DIR
+rm -Rd $JAR_UNZIPPED_DIR
+
+echo ">> Configurando a aplicacao para iniciar no boot do SO"
+echo -e "#!/bin/bash\n\n### BEGIN INIT INFO\n# Provides: defaultdaemon\n# Required-Start: $all\n# Required-Stop: $syslog\n# Default-Start: 2 3 4 5\n# Default-Stop: 0 1 6\n# Short-Description: Start daemon at boot time\n# Description: Enable service provided by daemon.\n### END INIT INFO\n\njava -jar $INSTALL_DIR/fonernp-agente.jar 2>&1 &" > /etc/init.d/fonernp-agente.sh
+chmod +x /etc/init.d/fonernp-agente.sh
+update-rc.d fonernp-agente.sh defaults
+
+echo ">> Iniciando a aplicacao"
+cd /etc/init.d
+./fonernp-agente.sh
+	
+echo "Sistema instalado com sucesso."

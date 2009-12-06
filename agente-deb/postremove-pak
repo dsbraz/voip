@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "Iniciando a remocao do sistema"
+
+if [ -e /opt/fonernp-agente ] ;
+then
+	cd /opt
+	rm -Rd fonernp-agente
+fi
+rm /etc/init.d/fonernp-agente.sh
+rm /etc/rc*.d/*fonernp-agente.sh
+
+echo "Sistema removido com sucesso."
